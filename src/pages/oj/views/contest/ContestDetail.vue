@@ -30,41 +30,36 @@
           </div>
         </template>
       </div>
-
     </div>
+
     <div v-show="showMenu" id="contest-menu">
       <VerticalMenu @on-click="handleRoute">
         <VerticalMenu-item :route="{name: 'contest-details', params: {contestID: contestID}}">
           <Icon type="home"></Icon>
           {{$t('m.Overview')}}
         </VerticalMenu-item>
-
         <VerticalMenu-item :disabled="contestMenuDisabled"
                            :route="{name: 'contest-announcement-list', params: {contestID: contestID}}">
           <Icon type="chatbubble-working"></Icon>
           {{$t('m.Announcements')}}
         </VerticalMenu-item>
-
         <VerticalMenu-item :disabled="contestMenuDisabled"
                            :route="{name: 'contest-problem-list', params: {contestID: contestID}}">
           <Icon type="ios-photos"></Icon>
           {{$t('m.Problems')}}
         </VerticalMenu-item>
-
         <VerticalMenu-item v-if="OIContestRealTimePermission"
                            :disabled="contestMenuDisabled"
                            :route="{name: 'contest-submission-list'}">
           <Icon type="navicon-round"></Icon>
           {{$t('m.Submissions')}}
         </VerticalMenu-item>
-
         <VerticalMenu-item v-if="OIContestRealTimePermission"
                            :disabled="contestMenuDisabled"
                            :route="{name: 'contest-rank', params: {contestID: contestID}}">
           <Icon type="stats-bars"></Icon>
           {{$t('m.Rankings')}}
         </VerticalMenu-item>
-
         <VerticalMenu-item v-if="showAdminHelper"
                            :route="{name: 'acm-helper', params: {contestID: contestID}}">
           <Icon type="ios-paw"></Icon>
@@ -85,7 +80,6 @@
 
   export default {
     name: 'ContestDetail',
-    components: {},
     data () {
       return {
         CONTEST_STATUS: CONTEST_STATUS,
@@ -93,36 +87,32 @@
         btnLoading: false,
         contestID: '',
         contestPassword: '',
+
+        // 違規計數
+        violationCount: 0,
+        // 抑制 flag，避免回到考試誤判
+        _suppressGuardUntil: 0,
+
         columns: [
           {
             title: this.$i18n.t('m.StartAt'),
-            render: (h, params) => {
-              return h('span', time.utcToLocal(params.row.start_time))
-            }
+            render: (h, params) => h('span', time.utcToLocal(params.row.start_time))
           },
           {
             title: this.$i18n.t('m.EndAt'),
-            render: (h, params) => {
-              return h('span', time.utcToLocal(params.row.end_time))
-            }
+            render: (h, params) => h('span', time.utcToLocal(params.row.end_time))
           },
           {
             title: this.$i18n.t('m.ContestType'),
-            render: (h, params) => {
-              return h('span', this.$i18n.t('m.' + params.row.contest_type ? params.row.contest_type.replace(' ', '_') : ''))
-            }
+            render: (h, params) => h('span', this.$i18n.t('m.' + (params.row.contest_type ? params.row.contest_type.replace(' ', '_') : '')))
           },
           {
             title: this.$i18n.t('m.Rule'),
-            render: (h, params) => {
-              return h('span', this.$i18n.t('m.' + params.row.rule_type))
-            }
+            render: (h, params) => h('span', this.$i18n.t('m.' + params.row.rule_type))
           },
           {
             title: this.$i18n.t('m.Creator'),
-            render: (h, data) => {
-              return h('span', data.row.created_by.username)
-            }
+            render: (h, data) => h('span', data.row.created_by.username)
           }
         ]
       }
@@ -140,56 +130,52 @@
           }, 1000)
         }
       })
-      //★ 新增：監聽 ESC
-   
-      // ...原本的初始化...
-      window.addEventListener('keydown', this.handleHotkeys, true) // 第三參數 true = capture 提高攔截機會
 
+      // 偵測鍵盤 (ESC, F12)
+      window.addEventListener('keydown', this.handleHotkeys, true)
 
-      // ★ 第一次進到比賽詳情頁就提示全螢幕
+      // 進入時提示全螢幕
       this.promptEnterFullscreen()
 
-      // ★ 監聽全螢幕狀態變化
+      // 偵測全螢幕狀態
       document.addEventListener('fullscreenchange', this.onFullscreenChange)
       document.addEventListener('webkitfullscreenchange', this.onFullscreenChange)
       document.addEventListener('mozfullscreenchange', this.onFullscreenChange)
       document.addEventListener('MSFullscreenChange', this.onFullscreenChange)
 
-      // ★ 額外：若彈窗被關閉沒點、使用者任意點擊頁面也嘗試一次（一次性）
+      // 任意點擊或按鍵也嘗試一次
       const oneShot = () => {
-        if (!this.isFullscreen()) {
-          this.requestFullscreen().catch(() => {})
-        }
+        if (!this.isFullscreen()) this.requestFullscreen().catch(() => {})
         document.removeEventListener('click', oneShot)
         document.removeEventListener('keydown', oneShot)
       }
       document.addEventListener('click', oneShot, { once: true })
       document.addEventListener('keydown', oneShot, { once: true })
+
+      // 偵測切換分頁/視窗
+      document.addEventListener('visibilitychange', this.handleVisibilityChange)
+      window.addEventListener('blur', this.handleWindowBlur, true)
     },
     methods: {
       ...mapActions(['changeDomTitle']),
-      handleRoute (route) {
-        this.$router.push(route)
-      },
+      handleRoute (route) { this.$router.push(route) },
       checkPassword () {
         if (this.contestPassword === '') {
-          this.$error('Password can\'t be empty')
-          return
+          this.$error('Password can\'t be empty'); return
         }
         this.btnLoading = true
-        api.checkContestPassword(this.contestID, this.contestPassword).then((res) => {
+        api.checkContestPassword(this.contestID, this.contestPassword).then(() => {
           this.$success('Succeeded')
           this.$store.commit(types.CONTEST_ACCESS, {access: true})
           this.btnLoading = false
-        }, (res) => {
-          this.btnLoading = false
-        })
+        }).catch(() => { this.btnLoading = false })
       },
+
       isFullscreen () {
         return document.fullscreenElement ||
-              document.webkitFullscreenElement ||
-              document.mozFullScreenElement ||
-              document.msFullscreenElement
+               document.webkitFullscreenElement ||
+               document.mozFullScreenElement ||
+               document.msFullscreenElement
       },
       requestFullscreen (el = document.documentElement) {
         const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen
@@ -211,6 +197,7 @@
           closable: false,
           maskClosable: false,
           onOk: () => {
+            this._suppress(300)
             return this.requestFullscreen().catch(() => {
               this.$Message.error('瀏覽器禁止自動全螢幕，請按 F11 或手動允許')
             })
@@ -218,61 +205,65 @@
         })
       },
       onFullscreenChange () {
-        // 離開全螢幕時再次提示（你也可以改成僅提醒不再彈）
-        if (!this.isFullscreen()) {
-          this.$Notice.warning({
-            title: '已離開全螢幕',
-            desc: '建議回到全螢幕以免分心。'
-          })
-          // 再提示一次是否要回到全螢幕
-          this.promptEnterFullscreen()
-        }
+        if (this._isSuppressed()) return
+        if (!this.isFullscreen()) this.addViolation('已離開全螢幕')
       },
-      // ---- 覆蓋你原本的 ESC 行為：同時提示 + 可再進全螢幕 ----
       handleHotkeys (e) {
-        // 除錯用：看 Key 與 KeyCode（打開 F12 Console 會看到）
-        console.log('[hotkey]', { key: e.key, keyCode: e.keyCode, ctrl: e.ctrlKey, shift: e.shiftKey })
-
-        // A) 偵測 ESC（27）
         if (e.key === 'Escape' || e.keyCode === 27) {
-          this.$Modal.warning({
-            title: '提示',
-            content: '偵測到按下 ESC！',
-            okText: '回到全螢幕',
-            closable: false,
-            maskClosable: false,
-            onOk: () => {
-              if (!this.isFullscreen()) {
-                this.requestFullscreen().catch(() => {
-                  this.$Message.info('若被瀏覽器阻擋，請按 F11 或允許全螢幕')
-                })
-              }
-            }
-          })
+          this.addViolation('按下 ESC 離開全螢幕')
         }
-
-        // B) 偵測 F12（123）或常見開發者工具快捷鍵（Ctrl+Shift+I/J、Ctrl+U）
         const isDevTools =
           e.keyCode === 123 ||
-          (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
-          (e.ctrlKey && (e.key === 'U' || e.key === 'u'))
-
+          (e.ctrlKey && e.shiftKey && ['I','i','J','j'].includes(e.key)) ||
+          (e.ctrlKey && ['U','u'].includes(e.key))
         if (isDevTools) {
-          // 注意：瀏覽器不保證能阻止開啟 DevTools，但我們可給警告並嘗試攔截預設行為
           if (e.preventDefault) e.preventDefault()
           if (e.stopPropagation) e.stopPropagation()
-
           this.$Modal.warning({
             title: '注意',
-            content: '偵測到嘗試開啟開發者工具（F12 / Ctrl+Shift+I/J / Ctrl+U）。考試中請勿操作。',
+            content: '偵測到嘗試開啟開發者工具。考試中請勿操作。',
             okText: '我知道了',
             closable: false,
             maskClosable: false
           })
         }
-      }
+      },
+      handleVisibilityChange () {
+        if (this._isSuppressed()) return
+        if (document.hidden) this.addViolation('切換到其他分頁')
+      },
+      handleWindowBlur () {
+        if (this._isSuppressed()) return
+        this.addViolation('切換到其他程式視窗')
+      },
+
+      // 統一違規處理
+      addViolation (reason) {
+        this.violationCount++
+        const times = this.violationCount
+        const title = times >= 3 ? '嚴重警告' : '警告'
+
+        this.$Modal.warning({
+          title,
+          content: `違規行為：${reason}<br>累計次數：${times}`,
+          okText: '回到考試',
+          closable: false,
+          maskClosable: false,
+          onOk: () => {
+            this._suppress(300) // 抑制 300ms 避免誤判
+            if (!this.isFullscreen()) {
+              this.requestFullscreen().catch(() => {
+                this.$Message.info('若被瀏覽器阻擋，請按 F11 或允許全螢幕')
+              })
+            }
+          }
+        })
+      },
+
+      // 抑制機制
+      _suppress (ms = 300) { this._suppressGuardUntil = Date.now() + ms },
+      _isSuppressed () { return Date.now() < this._suppressGuardUntil }
     },
-    
     computed: {
       ...mapState({
         showMenu: state => state.contest.itemVisible.menu,
@@ -280,55 +271,36 @@
         contest_table: state => [state.contest.contest],
         now: state => state.contest.now
       }),
-      ...mapGetters(
-        ['contestMenuDisabled', 'contestRuleType', 'contestStatus', 'countdown', 'isContestAdmin',
-          'OIContestRealTimePermission', 'passwordFormVisible']
-      ),
+      ...mapGetters(['contestMenuDisabled','contestRuleType','contestStatus','countdown','isContestAdmin','OIContestRealTimePermission','passwordFormVisible']),
       countdownColor () {
         if (this.contestStatus) {
           return CONTEST_STATUS_REVERSE[this.contestStatus].color
         }
       },
-      showAdminHelper () {
-        return this.isContestAdmin && this.contestRuleType === 'ACM'
-      }
-    },
-    watch: {
-      '$route' (newVal) {
-        this.route_name = newVal.name
-        this.contestID = newVal.params.contestID
-        this.changeDomTitle({title: this.contest.title})
-      }
+      showAdminHelper () { return this.isContestAdmin && this.contestRuleType === 'ACM' }
     },
     beforeDestroy () {
       clearInterval(this.timer)
       this.$store.commit(types.CLEAR_CONTEST)
-      window.addEventListener('keydown', this.handleHotkeys, true) // 第三參數 true = capture 提高攔截機會
-
+      window.removeEventListener('keydown', this.handleHotkeys, true)
       document.removeEventListener('fullscreenchange', this.onFullscreenChange)
       document.removeEventListener('webkitfullscreenchange', this.onFullscreenChange)
       document.removeEventListener('mozfullscreenchange', this.onFullscreenChange)
       document.removeEventListener('MSFullscreenChange', this.onFullscreenChange)
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange)
+      window.removeEventListener('blur', this.handleWindowBlur, true)
     }
   }
 </script>
 
 <style scoped lang="less">
-  pre {
-    display: inline-block;
-  }
-
-  #countdown {
-    font-size: 16px;
-  }
-
+  pre { display: inline-block; }
+  #countdown { font-size: 16px; }
   .flex-container {
     #contest-main {
       flex: 1 1;
       width: 0;
-      #contest-desc {
-        flex: auto;
-      }
+      #contest-desc { flex: auto; }
     }
     #contest-menu {
       flex: none;
@@ -338,10 +310,7 @@
     .contest-password {
       margin-top: 20px;
       margin-bottom: -10px;
-      &-input {
-        width: 200px;
-        margin-right: 10px;
-      }
+      &-input { width: 200px; margin-right: 10px; }
     }
   }
 </style>
